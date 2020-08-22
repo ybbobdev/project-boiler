@@ -1,0 +1,139 @@
+# a docker-compose.yml to start a simple cluster with three ZooKeeper nodes and three Solr nodes.
+#
+# To use:
+#
+# mkdir mycluster
+# cd mycluster
+# curl --output docker-compose.yml https://raw.githubusercontent.com/docker-solr/docker-solr-examples/master/docker-compose/docker-compose.yml
+# docker-compose up
+#
+version: '3.7'
+services:
+
+  postgres:
+    image: postgres:12
+    restart: always
+    ports:
+    - 5432:5432
+    volumes:
+    - db_data:/var/lib/postgresql/data
+    - "./data:/app_data"
+    networks:
+    - solr
+    environment:
+      POSTGRES_PASSWORD: postgrespassword
+
+  graphql-engine:
+    image: hasura/graphql-engine:v1.1.1
+    ports:
+    - "8083:8080"
+    depends_on:
+    - "postgres"
+    restart: always
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/postgres
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true" # set to "false" to disable console
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
+
+  solr1:
+    image: solr:8.3
+    container_name: solr1
+    ports:
+     - "8981:8983"
+    volumes:
+     - "./config:/app_config"
+    environment:
+      - ZK_HOST=zoo1:2181,zoo2:2181,zoo3:2181
+    networks:
+      - solr
+    depends_on:
+      - zoo1
+      - zoo2
+      - zoo3
+      - postgres
+
+  solr2:
+    image: solr:8.3
+    container_name: solr2
+    ports:
+     - "8982:8983"
+    volumes:
+     - "./config:/app_config"
+    environment:
+      - ZK_HOST=zoo1:2181,zoo2:2181,zoo3:2181
+    networks:
+      - solr
+    depends_on:
+      - zoo1
+      - zoo2
+      - zoo3
+      - postgres
+
+  solr3:
+    image: solr:8.3
+    container_name: solr3
+    ports:
+     - "8983:8983"
+    volumes:
+    - "./config:/app_config"
+    environment:
+      - ZK_HOST=zoo1:2181,zoo2:2181,zoo3:2181
+    networks:
+      - solr
+    depends_on:
+      - zoo1
+      - zoo2
+      - zoo3
+      - postgres
+
+  zoo1:
+    image: zookeeper:3.5
+    container_name: zoo1
+    volumes:
+    - "./zoo_data1:/data"
+    restart: always
+    hostname: zoo1
+    ports:
+      - 2181:2181
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181 server.2=zoo2:2888:3888;2181 server.3=zoo3:2888:3888;2181
+    networks:
+      - solr
+
+  zoo2:
+    image: zookeeper:3.5
+    container_name: zoo2
+    restart: always
+    volumes:
+    - "./zoo_data2:/data"
+    hostname: zoo2
+    ports:
+      - 2182:2181
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zoo1:2888:3888;2181 server.2=0.0.0.0:2888:3888;2181 server.3=zoo3:2888:3888;2181
+    networks:
+      - solr
+
+  zoo3:
+    image: zookeeper:3.5
+    container_name: zoo3
+    restart: always
+    volumes:
+    - "./zoo_data3:/data"
+    hostname: zoo3
+    ports:
+      - 2183:2181
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zoo1:2888:3888;2181 server.2=zoo2:2888:3888;2181 server.3=0.0.0.0:2888:3888;2181
+    networks:
+      - solr
+
+networks:
+  solr:
+
+volumes:
+  db_data:
